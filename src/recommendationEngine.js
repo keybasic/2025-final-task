@@ -29,12 +29,17 @@ class RecipeRecommendationEngine {
     if (this.imageService) {
       // 로컬 이미지가 있는 레시피는 먼저 설정
       recipes.forEach(recipe => {
-        if (!recipe.image || recipe.image === null) {
+        // 이미지가 null이거나 빈 문자열인 경우 로컬 이미지 확인
+        if (!recipe.image || recipe.image === null || recipe.image.trim() === '') {
           const localImage = this.imageService.getLocalImage(recipe.name, 'recipe');
           if (localImage) {
-            recipe.image = localImage;
-            console.log(`로컬 레시피 이미지 설정: ${recipe.name} -> ${localImage}`);
+            // 로컬 이미지 경로를 절대 경로로 설정 (Netlify 배포 시 정상 작동)
+            recipe.image = localImage.startsWith('/') ? localImage : `/${localImage}`;
+            console.log(`로컬 레시피 이미지 설정: ${recipe.name} -> ${recipe.image}`);
           }
+        } else if (recipe.image && recipe.image.startsWith('/img/')) {
+          // 이미 로컬 경로인 경우 절대 경로로 보장
+          recipe.image = recipe.image.startsWith('/') ? recipe.image : `/${recipe.image}`;
         }
       });
       

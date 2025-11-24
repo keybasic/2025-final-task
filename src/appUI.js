@@ -36,8 +36,22 @@ class AppUI {
       recipeCard.className = 'recipe-card';
       recipeCard.setAttribute('data-recipe-id', recipe.id);
       recipeCard.setAttribute('data-is-ai', 'true');
+      // AI 레시피 이미지 경로 처리
+      let aiImageUrl = recipe.image || '';
+      if (aiImageUrl && aiImageUrl.startsWith('/img/')) {
+        aiImageUrl = aiImageUrl;
+      } else if (aiImageUrl && !aiImageUrl.startsWith('http') && !aiImageUrl.startsWith('//')) {
+        aiImageUrl = aiImageUrl.startsWith('/') ? aiImageUrl : `/${aiImageUrl}`;
+      } else if (!aiImageUrl || aiImageUrl.trim() === '') {
+        aiImageUrl = `https://dummyimage.com/400x300/4CAF50/ffffff&text=${encodeURIComponent(recipe.name)}`;
+      }
+      
       recipeCard.innerHTML = `
-        <img src="${recipe.image}" alt="${recipe.name}" onerror="this.src='https://via.placeholder.com/300x200?text=${recipe.name}'">
+        <img src="${aiImageUrl}" 
+             alt="${recipe.name}" 
+             style="cursor: pointer;"
+             onclick="app.showRecipeDetail(${recipe.id})"
+             onerror="this.onerror=null; this.src='https://dummyimage.com/400x300/4CAF50/ffffff&text=${encodeURIComponent(recipe.name)}';">
         <div class="recipe-info">
           <h3>${recipe.name}</h3>
           <div class="recipe-meta">
@@ -294,11 +308,23 @@ class AppUI {
                 imageUrl = `https://dummyimage.com/400x300/${color}&text=${encodeURIComponent(recipe.name)}`;
               }
               
+              // 로컬 이미지 경로 처리 (Netlify 배포 시 절대 경로로 변환)
+              let finalImageUrl = imageUrl;
+              if (imageUrl && imageUrl.startsWith('/img/')) {
+                // 이미 절대 경로이므로 그대로 사용
+                finalImageUrl = imageUrl;
+              } else if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('//')) {
+                // 상대 경로인 경우 절대 경로로 변환
+                finalImageUrl = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+              }
+              
               return `
               <div class="recipe-card" data-recipe-id="${recipe.id}" data-is-ai="${recipe.isAI || false}">
-                <img src="${imageUrl}" 
+                <img src="${finalImageUrl}" 
                      alt="${recipe.name}" 
                      loading="lazy" 
+                     style="cursor: pointer;"
+                     onclick="app.showRecipeDetail(${recipe.id})"
                      onerror="this.onerror=null; this.src='https://dummyimage.com/400x300/4CAF50/ffffff&text=${encodeURIComponent(recipe.name)}';">
                 <div class="recipe-info">
                   <h3>${recipe.name}</h3>
@@ -887,6 +913,49 @@ class AppUI {
     const existingRating = data.ratings.find(r => r.recipeId === recipe.id);
     this.currentRating = existingRating ? existingRating.rating : 0;
 
+    // 레시피 이미지 경로 처리 (Netlify 배포 시 절대 경로로 변환)
+    let recipeImageUrl = recipe.image || '';
+    
+    console.log(`레시피 상세 페이지 - 원본 이미지 URL: ${recipe.name} -> ${recipeImageUrl}`);
+    
+    // 1. 로컬 이미지가 있는지 먼저 확인 (로컬 이미지가 있으면 우선 사용)
+    if (this.imageService) {
+      const localImage = this.imageService.getLocalImage(recipe.name, 'recipe');
+      if (localImage) {
+        recipeImageUrl = localImage.startsWith('/') ? localImage : `/${localImage}`;
+        console.log(`로컬 이미지 우선 사용: ${recipe.name} -> ${recipeImageUrl}`);
+      }
+    }
+    
+    // 2. 이미지 URL이 여전히 없거나 유효하지 않은 경우 처리
+    if (!recipeImageUrl || recipeImageUrl.trim() === '' || recipeImageUrl === 'null' || recipeImageUrl === 'undefined') {
+      // 로컬 이미지도 확인했는데 없으면 placeholder 사용
+      const seed = recipe.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const colors = ['4CAF50/ffffff', '2196F3/ffffff', 'FF9800/ffffff', '9C27B0/ffffff'];
+      const color = colors[seed % colors.length];
+      recipeImageUrl = `https://dummyimage.com/400x300/${color}&text=${encodeURIComponent(recipe.name)}`;
+      console.log(`Placeholder 이미지 사용: ${recipe.name} -> ${recipeImageUrl}`);
+    } else {
+      // 3. 로컬 경로 처리 (/img/로 시작하는 경우)
+      if (recipeImageUrl.startsWith('/img/')) {
+        // 이미 절대 경로이므로 그대로 사용
+        recipeImageUrl = recipeImageUrl;
+        console.log(`로컬 이미지 경로 (절대): ${recipeImageUrl}`);
+      } 
+      // 4. 외부 URL이 아닌 상대 경로 처리
+      else if (!recipeImageUrl.startsWith('http') && !recipeImageUrl.startsWith('//') && !recipeImageUrl.startsWith('data:')) {
+        // 상대 경로인 경우 절대 경로로 변환
+        recipeImageUrl = recipeImageUrl.startsWith('/') ? recipeImageUrl : `/${recipeImageUrl}`;
+        console.log(`상대 경로를 절대 경로로 변환: ${recipeImageUrl}`);
+      }
+      // 5. 외부 URL (http, https, //)는 그대로 사용
+      else {
+        console.log(`외부 URL 사용: ${recipeImageUrl}`);
+      }
+    }
+    
+    console.log(`최종 레시피 상세 이미지 경로: ${recipe.name} -> ${recipeImageUrl}`);
+
     const main = document.querySelector('.main-content') || document.createElement('main');
     main.className = 'main-content';
     main.innerHTML = `
@@ -894,7 +963,16 @@ class AppUI {
         <button class="btn btn-secondary btn-back" onclick="app.showHome()">← 뒤로</button>
         
         <div class="recipe-header">
-          <img src="${recipe.image}" alt="${recipe.name}" onerror="this.src='https://via.placeholder.com/400x300?text=${recipe.name}'">
+          <img src="${recipeImageUrl}" 
+               alt="${recipe.name}" 
+               loading="lazy"
+               onerror="
+                 console.error('이미지 로드 실패:', '${recipeImageUrl}');
+                 const fallbackUrl = 'https://dummyimage.com/400x300/4CAF50/ffffff&text=${encodeURIComponent(recipe.name)}';
+                 this.onerror = null;
+                 this.src = fallbackUrl;
+               "
+               onload="console.log('이미지 로드 성공:', '${recipeImageUrl}')">
           <div class="recipe-title-section">
             <h1>${recipe.name} ${recipe.isAI ? '🤖' : ''}</h1>
             ${recipe.description ? `<p class="recipe-description">${recipe.description}</p>` : ''}
