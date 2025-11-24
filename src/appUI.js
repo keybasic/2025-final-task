@@ -1,12 +1,73 @@
 // UI 컴포넌트 관리
 class AppUI {
-  constructor(dataManager, weatherService, recommendationEngine) {
+  constructor(dataManager, weatherService, recommendationEngine, openAIService, imageService) {
     this.dataManager = dataManager;
     this.weatherService = weatherService;
     this.recommendationEngine = recommendationEngine;
+    this.openAIService = openAIService;
+    this.imageService = imageService;
     this.currentView = 'home';
     this.currentRecipe = null;
     this.alarmInterval = null;
+    this.setupAIRecipeListener();
+  }
+
+  setupAIRecipeListener() {
+    // AI 레시피가 준비되면 UI에 추가
+    window.addEventListener('aiRecipesReady', (event) => {
+      if (this.currentView === 'home') {
+        const aiRecipes = event.detail;
+        this.addAIRecipesToHome(aiRecipes);
+      }
+    });
+  }
+
+  addAIRecipesToHome(aiRecipes) {
+    const recipeGrid = document.querySelector('.recipe-grid');
+    if (!recipeGrid) return;
+
+    // 기존 AI 레시피 제거 (중복 방지)
+    const existingAICards = recipeGrid.querySelectorAll('[data-is-ai="true"]');
+    existingAICards.forEach(card => card.remove());
+
+    // 새로운 AI 레시피 추가
+    aiRecipes.forEach(recipe => {
+      const recipeCard = document.createElement('div');
+      recipeCard.className = 'recipe-card';
+      recipeCard.setAttribute('data-recipe-id', recipe.id);
+      recipeCard.setAttribute('data-is-ai', 'true');
+      recipeCard.innerHTML = `
+        <img src="${recipe.image}" alt="${recipe.name}" onerror="this.src='https://via.placeholder.com/300x200?text=${recipe.name}'">
+        <div class="recipe-info">
+          <h3>${recipe.name}</h3>
+          <div class="recipe-meta">
+            <span>⏱️ ${recipe.cookingTime}분</span>
+            <span>📊 ${recipe.difficulty}</span>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="app.showRecipeDetail(${recipe.id})">레시피 보기</button>
+        </div>
+      `;
+      
+      // 애니메이션 효과와 함께 추가
+      recipeCard.style.opacity = '0';
+      recipeCard.style.transform = 'translateY(20px)';
+      recipeGrid.appendChild(recipeCard);
+      
+      // 페이드 인 애니메이션
+      setTimeout(() => {
+        recipeCard.style.transition = 'opacity 0.5s, transform 0.5s';
+        recipeCard.style.opacity = '1';
+        recipeCard.style.transform = 'translateY(0)';
+      }, 50);
+
+      // lastRecommendations에 추가
+      if (!this.lastRecommendations) {
+        this.lastRecommendations = [];
+      }
+      if (!this.lastRecommendations.find(r => r.id === recipe.id)) {
+        this.lastRecommendations.push(recipe);
+      }
+    });
   }
 
   init() {
@@ -141,65 +202,33 @@ class AppUI {
     const data = this.dataManager.getData();
     const user = data.user;
     const dateInfo = this.weatherService.getCurrentDate();
-    const weather = await this.weatherService.getWeather(user.city);
-    const recommendations = await this.recommendationEngine.getRecommendations();
-
+    
+    // 먼저 기본 레이아웃 렌더링 (빠른 초기 로딩)
     const main = document.querySelector('.main-content') || document.createElement('main');
     main.className = 'main-content';
-    
-    if (recommendations.error) {
-      main.innerHTML = `
-        <div class="home-container">
-          <div class="weather-card">
-            <h3>오늘의 날씨</h3>
-            <div class="weather-info">
-              <span class="weather-icon">${weather.icon}</span>
-              <div>
-                <p class="city">${user.city}</p>
-                <p class="temp">${weather.temp}°C ${weather.condition}</p>
-              </div>
+    main.innerHTML = `
+      <div class="home-container">
+        <div class="weather-card">
+          <h3>오늘의 날씨</h3>
+          <div class="weather-info">
+            <span class="weather-icon">⏳</span>
+            <div>
+              <p class="city">${user.city}</p>
+              <p class="temp">로딩 중...</p>
             </div>
           </div>
-          <div class="alert alert-info">${recommendations.error}</div>
+          <p class="date-info">${dateInfo.year}년 ${dateInfo.month}월 ${dateInfo.day}일 ${dateInfo.dayOfWeek}요일</p>
         </div>
-      `;
-    } else {
-      main.innerHTML = `
-        <div class="home-container">
-          <div class="weather-card">
-            <h3>오늘의 날씨</h3>
-            <div class="weather-info">
-              <span class="weather-icon">${weather.icon}</span>
-              <div>
-                <p class="city">${user.city}</p>
-                <p class="temp">${weather.temp}°C ${weather.condition}</p>
-              </div>
-            </div>
-            <p class="date-info">${dateInfo.year}년 ${dateInfo.month}월 ${dateInfo.day}일 ${dateInfo.dayOfWeek}요일</p>
-          </div>
 
-          <div class="recommendations-section">
-            <h2>오늘의 요리 추천 🍳</h2>
-            ${recommendations.length === 0 
-              ? '<div class="alert alert-info">보유한 재료로 만들 수 있는 요리가 없습니다. 재료를 추가해주세요!</div>'
-              : '<div class="recipe-grid">' + recommendations.map(recipe => `
-                  <div class="recipe-card" data-recipe-id="${recipe.id}">
-                    <img src="${recipe.image}" alt="${recipe.name}" onerror="this.src='https://via.placeholder.com/300x200?text=${recipe.name}'">
-                    <div class="recipe-info">
-                      <h3>${recipe.name}</h3>
-                      <div class="recipe-meta">
-                        <span>⏱️ ${recipe.cookingTime}분</span>
-                        <span>📊 ${recipe.difficulty}</span>
-                      </div>
-                      <button class="btn btn-primary btn-sm" onclick="app.showRecipeDetail(${recipe.id})">레시피 보기</button>
-                    </div>
-                  </div>
-                `).join('') + '</div>'
-            }
+        <div class="recommendations-section">
+          <h2>오늘의 요리 추천 🍳</h2>
+          <div class="loading-recipes">
+            <div class="loading-spinner"></div>
+            <p>레시피를 준비하고 있습니다...</p>
           </div>
         </div>
-      `;
-    }
+      </div>
+    `;
 
     const existingMain = document.querySelector('.main-content');
     if (existingMain) {
@@ -207,6 +236,84 @@ class AppUI {
     } else {
       const nav = document.querySelector('.main-nav');
       nav.after(main);
+    }
+
+    // 병렬로 날씨와 레시피 추천 가져오기 (로딩 속도 개선)
+    const [weather, recommendations] = await Promise.all([
+      this.weatherService.getWeather(user.city),
+      this.recommendationEngine.getRecommendations(true) // AI 추천 활성화
+    ]);
+    
+    // AI 레시피를 추적하기 위해 저장
+    this.lastRecommendations = recommendations;
+
+    // 날씨 정보 업데이트
+    const weatherCard = main.querySelector('.weather-card');
+    if (weatherCard) {
+      weatherCard.innerHTML = `
+        <h3>오늘의 날씨</h3>
+        <div class="weather-info">
+          <span class="weather-icon">${weather.icon}</span>
+          <div>
+            <p class="city">${user.city}</p>
+            <p class="temp">${weather.temp}°C ${weather.condition}</p>
+          </div>
+        </div>
+        <p class="date-info">${dateInfo.year}년 ${dateInfo.month}월 ${dateInfo.day}일 ${dateInfo.dayOfWeek}요일</p>
+      `;
+    }
+
+    // 레시피 추천 업데이트
+    const recommendationsSection = main.querySelector('.recommendations-section');
+    if (recommendationsSection) {
+      if (recommendations.error) {
+        recommendationsSection.innerHTML = `
+          <h2>오늘의 요리 추천 🍳</h2>
+          <div class="alert alert-info">${recommendations.error}</div>
+        `;
+      } else if (recommendations.length === 0) {
+        recommendationsSection.innerHTML = `
+          <h2>오늘의 요리 추천 🍳</h2>
+          <div class="alert alert-info">보유한 재료로 만들 수 있는 요리가 없습니다. 재료를 추가해주세요!</div>
+        `;
+      } else {
+        recommendationsSection.innerHTML = `
+          <h2>오늘의 요리 추천 🍳</h2>
+          <div class="recipe-grid">
+            ${recommendations.map(recipe => {
+              // 이미지 URL이 유효한지 확인
+              let imageUrl = recipe.image && recipe.image.trim() !== '' 
+                ? recipe.image 
+                : `https://dummyimage.com/400x300/4CAF50/ffffff&text=${encodeURIComponent(recipe.name)}`;
+              
+              // 이미지가 null이거나 placeholder인 경우 더 나은 이미지 생성
+              if (!recipe.image || recipe.image === null || recipe.image.includes('placeholder')) {
+                const seed = recipe.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                const colors = ['4CAF50/ffffff', '2196F3/ffffff', 'FF9800/ffffff', '9C27B0/ffffff'];
+                const color = colors[seed % colors.length];
+                imageUrl = `https://dummyimage.com/400x300/${color}&text=${encodeURIComponent(recipe.name)}`;
+              }
+              
+              return `
+              <div class="recipe-card" data-recipe-id="${recipe.id}" data-is-ai="${recipe.isAI || false}">
+                <img src="${imageUrl}" 
+                     alt="${recipe.name}" 
+                     loading="lazy" 
+                     onerror="this.onerror=null; this.src='https://dummyimage.com/400x300/4CAF50/ffffff&text=${encodeURIComponent(recipe.name)}';">
+                <div class="recipe-info">
+                  <h3>${recipe.name}</h3>
+                  <div class="recipe-meta">
+                    <span>⏱️ ${recipe.cookingTime}분</span>
+                    <span>📊 ${recipe.difficulty}</span>
+                  </div>
+                  <button class="btn btn-primary btn-sm" onclick="app.showRecipeDetail(${recipe.id})">레시피 보기</button>
+                </div>
+              </div>
+            `;
+            }).join('')}
+          </div>
+        `;
+      }
     }
   }
 
@@ -244,7 +351,11 @@ class AppUI {
               <div class="upload-area" id="uploadArea">
                 <input type="file" id="receiptFile" accept="image/*" style="display: none;">
                 <p>📷 사진을 클릭하여 업로드</p>
-                <small>(현재 버전에서는 수동 입력을 권장합니다)</small>
+                <small>영수증 이미지를 업로드하면 재료를 자동으로 추출합니다</small>
+              </div>
+              <div id="uploadProgress" style="display: none; margin-top: 1rem;">
+                <div class="loading-spinner"></div>
+                <p>영수증을 분석 중입니다...</p>
               </div>
             </div>
           </div>
@@ -255,15 +366,34 @@ class AppUI {
           ${ingredients.length === 0 
             ? '<div class="alert alert-info">냉장고가 비어있습니다. 재료를 추가해주세요!</div>'
             : `<div class="ingredients-grid">
-                ${ingredients.map(ing => `
+                ${ingredients.map(ing => {
+                  // 이미지가 없거나 placeholder인 경우 확인
+                  const hasValidImage = ing.image && 
+                    !ing.image.includes('placeholder') && 
+                    ing.image.trim() !== '';
+                  
+                  // 즉시 사용 가능한 이미지 URL 생성
+                  let ingredientImageUrl = hasValidImage ? ing.image : '';
+                  if (!ingredientImageUrl || ingredientImageUrl.includes('placeholder')) {
+                    const seed = ing.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                    const colors = ['4CAF50/ffffff', '2196F3/ffffff', 'FF9800/ffffff', '9C27B0/ffffff'];
+                    const color = colors[seed % colors.length];
+                    ingredientImageUrl = `https://dummyimage.com/200x200/${color}&text=${encodeURIComponent(ing.name)}`;
+                  }
+                  
+                  return `
                   <div class="ingredient-item">
-                    <img src="${ing.image || 'https://via.placeholder.com/100x100?text=' + ing.name}" 
+                    <img src="${ingredientImageUrl}" 
                          alt="${ing.name}" 
-                         onerror="this.src='https://via.placeholder.com/100x100?text=${ing.name}'">
+                         loading="lazy"
+                         onerror="this.onerror=null; this.src='https://dummyimage.com/200x200/4CAF50/ffffff&text=${encodeURIComponent(ing.name)}';"
+                         data-ingredient-name="${ing.name}"
+                         data-ingredient-id="${ing.id}">
                     <p>${ing.name}</p>
                     <button class="btn-remove" onclick="app.removeIngredient('${ing.id}')">삭제</button>
                   </div>
-                `).join('')}
+                `;
+                }).join('')}
               </div>`
           }
         </div>
@@ -288,17 +418,94 @@ class AppUI {
       nav.after(main);
     }
 
+    // 재료 이미지가 없거나 dummyimage인 경우 로컬 이미지 먼저 확인 후 백그라운드에서 가져오기
+    if (this.imageService && ingredients.length > 0) {
+      // 먼저 로컬 이미지 확인
+      ingredients.forEach(ing => {
+        if (!ing.image || ing.image.includes('placeholder') || ing.image.includes('dummyimage')) {
+          const localImage = this.imageService.getLocalImage(ing.name, 'ingredient');
+          if (localImage) {
+            ing.image = localImage;
+            // 데이터도 업데이트
+            const data = this.dataManager.getData();
+            const ingredientIndex = data.ingredients.findIndex(i => i.id === ing.id);
+            if (ingredientIndex >= 0) {
+              data.ingredients[ingredientIndex].image = localImage;
+              this.dataManager.updateData('ingredients', data.ingredients);
+            }
+            // UI도 즉시 업데이트
+            const imgElement = document.querySelector(`img[data-ingredient-id="${ing.id}"]`);
+            if (imgElement) {
+              imgElement.src = localImage;
+            }
+          }
+        }
+      });
+      
+      // 로컬 이미지가 없는 경우에만 백그라운드에서 가져오기
+      ingredients.forEach(async (ing) => {
+        if (!ing.image || ing.image.includes('placeholder') || ing.image.includes('dummyimage')) {
+          try {
+            const imageUrl = await this.imageService.getIngredientImage(ing.name);
+            // 이미지 요소 찾아서 업데이트
+            const imgElement = document.querySelector(`img[data-ingredient-id="${ing.id}"]`);
+            if (imgElement && imageUrl && !imageUrl.includes('dummyimage') && !imageUrl.startsWith('/img/')) {
+              // 실제 이미지로 업데이트 (페이드 효과)
+              imgElement.style.opacity = '0.7';
+              imgElement.src = imageUrl;
+              imgElement.onload = () => {
+                imgElement.style.transition = 'opacity 0.3s';
+                imgElement.style.opacity = '1';
+              };
+              
+              // 데이터도 업데이트
+              const data = this.dataManager.getData();
+              const ingredientIndex = data.ingredients.findIndex(i => i.id === ing.id);
+              if (ingredientIndex >= 0) {
+                data.ingredients[ingredientIndex].image = imageUrl;
+                this.dataManager.updateData('ingredients', data.ingredients);
+              }
+            }
+          } catch (error) {
+            console.warn(`재료 이미지 가져오기 실패 (${ing.name}):`, error);
+          }
+        }
+      });
+    }
+
     // 수동 입력 폼
-    document.getElementById('manualIngredientForm').addEventListener('submit', (e) => {
+    document.getElementById('manualIngredientForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = document.getElementById('ingredientName').value.trim();
-      const image = document.getElementById('ingredientImage').value.trim();
+      const imageInput = document.getElementById('ingredientImage').value.trim();
       
       if (name) {
+        let imageUrl = imageInput;
+        
+        // 이미지 URL이 입력되지 않았으면 Pixabay에서 검색
+        if (!imageUrl && this.imageService) {
+          try {
+            const loadingBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = loadingBtn.textContent;
+            loadingBtn.textContent = '이미지 검색 중...';
+            loadingBtn.disabled = true;
+            
+            imageUrl = await this.imageService.getIngredientImage(name);
+            
+            loadingBtn.textContent = originalText;
+            loadingBtn.disabled = false;
+          } catch (error) {
+            console.warn('재료 이미지 검색 실패:', error);
+            imageUrl = `https://via.placeholder.com/200x200?text=${encodeURIComponent(name)}`;
+          }
+        } else if (!imageUrl) {
+          imageUrl = `https://via.placeholder.com/200x200?text=${encodeURIComponent(name)}`;
+        }
+        
         const newIngredient = {
           id: Date.now().toString(),
           name: name,
-          image: image || `https://via.placeholder.com/100x100?text=${name}`
+          image: imageUrl
         };
         
         const data = this.dataManager.getData();
@@ -316,10 +523,10 @@ class AppUI {
       document.getElementById('receiptFile').click();
     });
 
-    document.getElementById('receiptFile').addEventListener('change', (e) => {
+    document.getElementById('receiptFile').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (file) {
-        alert('영수증 인식 기능은 개발 중입니다. 현재는 수동 입력을 사용해주세요.');
+        await this.processReceiptImage(file);
       }
     });
   }
@@ -410,11 +617,22 @@ class AppUI {
     }
   }
 
-  addToFridge(name) {
+  async addToFridge(name) {
+    let imageUrl = `https://via.placeholder.com/200x200?text=${encodeURIComponent(name)}`;
+    
+    // Pixabay에서 이미지 가져오기
+    if (this.imageService) {
+      try {
+        imageUrl = await this.imageService.getIngredientImage(name);
+      } catch (error) {
+        console.warn(`재료 이미지 가져오기 실패 (${name}):`, error);
+      }
+    }
+    
     const newIngredient = {
       id: Date.now().toString(),
       name: name,
-      image: `https://via.placeholder.com/100x100?text=${name}`
+      image: imageUrl
     };
     
     const data = this.dataManager.getData();
@@ -643,9 +861,20 @@ class AppUI {
   }
 
   showRecipeDetail(recipeId) {
+    // AI 생성 레시피는 메모리에만 존재하므로 별도 처리
+    // recommendationEngine에서 최근 추천된 레시피를 저장해두어야 함
     const data = this.dataManager.getData();
-    const recipe = data.recipes.find(r => r.id === recipeId);
-    if (!recipe) return;
+    let recipe = data.recipes.find(r => r.id === recipeId);
+    
+    // AI 레시피는 메모리에만 있을 수 있으므로, 임시 저장소에서 찾기
+    if (!recipe && this.lastRecommendations) {
+      recipe = this.lastRecommendations.find(r => r.id === recipeId);
+    }
+    
+    if (!recipe) {
+      alert('레시피를 찾을 수 없습니다.');
+      return;
+    }
 
     this.currentRecipe = recipe;
     this.renderRecipeDetail();
@@ -667,10 +896,12 @@ class AppUI {
         <div class="recipe-header">
           <img src="${recipe.image}" alt="${recipe.name}" onerror="this.src='https://via.placeholder.com/400x300?text=${recipe.name}'">
           <div class="recipe-title-section">
-            <h1>${recipe.name}</h1>
+            <h1>${recipe.name} ${recipe.isAI ? '🤖' : ''}</h1>
+            ${recipe.description ? `<p class="recipe-description">${recipe.description}</p>` : ''}
             <div class="recipe-meta-detail">
               <span>⏱️ ${recipe.cookingTime}분</span>
               <span>📊 난이도: ${recipe.difficulty}</span>
+              ${recipe.isAI ? '<span class="ai-badge">🤖 AI 추천</span>' : ''}
             </div>
           </div>
         </div>
@@ -788,6 +1019,106 @@ class AppUI {
         this.showSettings();
         break;
     }
+  }
+
+  async processReceiptImage(file) {
+    const uploadProgress = document.getElementById('uploadProgress');
+    const uploadArea = document.getElementById('uploadArea');
+    
+    try {
+      // 파일 크기 체크 (10MB 제한)
+      if (file.size > 10 * 1024 * 1024) {
+        alert('이미지 파일 크기는 10MB 이하여야 합니다.');
+        return;
+      }
+
+      uploadArea.style.display = 'none';
+      uploadProgress.style.display = 'block';
+
+      // 이미지를 Base64로 변환
+      const base64 = await this.fileToBase64(file);
+
+      // OpenAI API로 영수증 분석
+      const ingredients = await this.openAIService.analyzeReceiptImage(base64);
+
+      if (ingredients && ingredients.length > 0) {
+        // 추출된 재료를 냉장고에 추가
+        const data = this.dataManager.getData();
+        const existingNames = data.ingredients.map(ing => ing.name.toLowerCase());
+
+        let addedCount = 0;
+        // 재료 이미지를 병렬로 가져오기
+        const ingredientPromises = ingredients.map(async (ingName) => {
+          const normalizedName = ingName.trim();
+          if (normalizedName && normalizedName.length > 0 && 
+              !existingNames.some(existing => 
+                existing.includes(normalizedName.toLowerCase()) ||
+                normalizedName.toLowerCase().includes(existing)
+              )) {
+            let imageUrl = `https://via.placeholder.com/200x200?text=${encodeURIComponent(normalizedName)}`;
+            
+            // Pixabay에서 이미지 가져오기
+            if (this.imageService) {
+              try {
+                imageUrl = await this.imageService.getIngredientImage(normalizedName);
+              } catch (error) {
+                console.warn(`재료 이미지 가져오기 실패 (${normalizedName}):`, error);
+              }
+            }
+            
+            return {
+              id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+              name: normalizedName,
+              image: imageUrl
+            };
+          }
+          return null;
+        });
+        
+        const newIngredients = await Promise.all(ingredientPromises);
+        newIngredients.forEach(newIngredient => {
+          if (newIngredient) {
+            data.ingredients.push(newIngredient);
+            existingNames.push(newIngredient.name.toLowerCase());
+            addedCount++;
+          }
+        });
+
+        this.dataManager.updateData('ingredients', data.ingredients);
+        
+        uploadProgress.style.display = 'none';
+        uploadArea.style.display = 'block';
+        
+        alert(`${addedCount}개의 재료가 냉장고에 추가되었습니다!`);
+        this.renderFridge();
+      } else {
+        throw new Error('재료를 추출할 수 없습니다.');
+      }
+    } catch (error) {
+      console.error('영수증 처리 오류:', error);
+      uploadProgress.style.display = 'none';
+      uploadArea.style.display = 'block';
+      
+      let errorMessage = '영수증 분석 중 오류가 발생했습니다.';
+      if (error.message.includes('API 키')) {
+        errorMessage = 'OpenAI API 키가 설정되지 않았습니다. .env 파일을 확인해주세요.';
+      } else if (error.message.includes('API 요청')) {
+        errorMessage = 'API 요청이 실패했습니다. API 키와 잔액을 확인해주세요.';
+      }
+      alert(errorMessage + '\n오류: ' + error.message);
+    }
+  }
+
+  fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64String = reader.result.split(',')[1];
+        resolve(base64String);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   }
 }
 

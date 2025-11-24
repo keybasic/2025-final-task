@@ -35,7 +35,7 @@ class DataManager {
       {
         id: 1,
         name: '된장찌개',
-        image: 'https://via.placeholder.com/300x200?text=된장찌개',
+        image: null, // 이미지 서비스로 가져옴
         cookingTime: 30,
         difficulty: '쉬움',
         ingredients: ['된장', '두부', '대파', '감자', '고춧가루'],
@@ -53,7 +53,7 @@ class DataManager {
       {
         id: 2,
         name: '김치볶음밥',
-        image: 'https://via.placeholder.com/300x200?text=김치볶음밥',
+        image: '/img/김치볶음밥.jpg', // 로컬 이미지 사용
         cookingTime: 15,
         difficulty: '쉬움',
         ingredients: ['김치', '밥', '계란', '대파', '참기름'],
@@ -71,7 +71,7 @@ class DataManager {
       {
         id: 3,
         name: '삼겹살 구이',
-        image: 'https://via.placeholder.com/300x200?text=삼겹살구이',
+        image: null,
         cookingTime: 20,
         difficulty: '쉬움',
         ingredients: ['삼겹살', '소금', '후추', '상추', '깻잎'],
@@ -88,7 +88,7 @@ class DataManager {
       {
         id: 4,
         name: '콩나물국',
-        image: 'https://via.placeholder.com/300x200?text=콩나물국',
+        image: null,
         cookingTime: 15,
         difficulty: '쉬움',
         ingredients: ['콩나물', '대파', '고춧가루', '멸치육수'],
@@ -105,7 +105,7 @@ class DataManager {
       {
         id: 5,
         name: '계란말이',
-        image: 'https://via.placeholder.com/300x200?text=계란말이',
+        image: '/img/계란말이.jpg', // 로컬 이미지 사용
         cookingTime: 10,
         difficulty: '보통',
         ingredients: ['계란', '당근', '대파', '소금'],
@@ -122,7 +122,7 @@ class DataManager {
       {
         id: 6,
         name: '파스타',
-        image: 'https://via.placeholder.com/300x200?text=파스타',
+        image: null,
         cookingTime: 25,
         difficulty: '보통',
         ingredients: ['파스타면', '토마토', '올리브오일', '마늘', '파마산치즈'],

@@ -293,6 +293,7 @@ body {
   box-shadow: var(--shadow);
   transition: transform 0.3s, box-shadow 0.3s;
   cursor: pointer;
+  position: relative;
 }
 
 .recipe-card:hover {
@@ -637,6 +638,22 @@ body {
   display: flex;
   gap: 1.5rem;
   color: var(--text-secondary);
+  align-items: center;
+}
+
+.recipe-description {
+  margin: 0.5rem 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.ai-badge {
+  background: var(--secondary-color);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 .recipe-section {
@@ -764,6 +781,64 @@ body {
   background: #e8f5e9;
   color: #2e7d32;
   border-left: 4px solid var(--primary-color);
+}
+
+/* 로딩 스피너 */
+.loading-spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid var(--primary-color);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+
+.loading-recipes {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-secondary);
+}
+
+.loading-recipes p {
+  margin-top: 1rem;
+  font-size: 1.1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+#uploadProgress {
+  text-align: center;
+  padding: 1rem;
+  background: var(--background);
+  border-radius: 8px;
+  margin-top: 1rem;
+}
+
+#uploadProgress p {
+  margin-top: 0.5rem;
+  color: var(--text-secondary);
+}
+
+/* AI 생성 레시피 표시 */
+.recipe-card[data-is-ai="true"] {
+  border: 2px solid var(--secondary-color);
+}
+
+.recipe-card[data-is-ai="true"]::before {
+  content: "🤖 AI 추천";
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: var(--secondary-color);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
 }
 
 /* 반응형 디자인 */
