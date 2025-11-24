@@ -206,8 +206,24 @@ class OpenAIService {
   }
 
   // 레시피 이미지 생성을 위한 프롬프트 생성
-  generateRecipeImagePrompt(recipeName) {
-    return `A beautiful, appetizing Korean dish called "${recipeName}". Professional food photography style, well-lit, on a clean plate, high quality, realistic, appetizing`;
+  generateRecipeImagePrompt(recipeName, description = '', ingredients = []) {
+    // 레시피 설명과 재료 정보를 활용하여 더 정확한 프롬프트 생성
+    let prompt = `A beautiful, appetizing Korean dish called "${recipeName}"`;
+    
+    // 설명이 있으면 추가
+    if (description && description.trim()) {
+      prompt += `. ${description}`;
+    }
+    
+    // 주요 재료가 있으면 추가 (최대 3개)
+    if (ingredients && ingredients.length > 0) {
+      const mainIngredients = ingredients.slice(0, 3).join(', ');
+      prompt += `. Made with ${mainIngredients}`;
+    }
+    
+    prompt += `. Professional food photography style, well-lit, on a clean white plate or traditional Korean table setting, high quality, realistic, appetizing, Korean cuisine, delicious looking food`;
+    
+    return prompt;
   }
 
   // 재료 이미지 생성을 위한 프롬프트 생성

@@ -3,6 +3,8 @@ class ImageService {
   constructor(openAIService) {
     // 이미지 캐시
     this.imageCache = {};
+    // 레시피 정보 캐시 (이미지 생성 시 사용)
+    this.recipeInfoCache = {};
     this.openAIService = openAIService;
     
     // 로컬 이미지 매핑 (레시피 이름 -> 파일명)
@@ -46,6 +48,23 @@ class ImageService {
     
     return null;
   }
+  
+  // 레시피 정보 가져오기 (캐시에서)
+  getRecipeInfo(recipeName) {
+    // 레시피 정보 캐시 확인
+    if (this.recipeInfoCache && this.recipeInfoCache[recipeName]) {
+      return this.recipeInfoCache[recipeName];
+    }
+    return null;
+  }
+  
+  // 레시피 정보 저장
+  setRecipeInfo(recipeName, info) {
+    if (!this.recipeInfoCache) {
+      this.recipeInfoCache = {};
+    }
+    this.recipeInfoCache[recipeName] = info;
+  }
 
   async getRecipeImage(recipeName) {
     try {
@@ -68,8 +87,14 @@ class ImageService {
       // 방법 1: DALL-E API를 사용하여 이미지 생성 (OpenAI API 키가 있으면)
       if (this.openAIService && this.openAIService.apiKey) {
         try {
-          const prompt = this.openAIService.generateRecipeImagePrompt(recipeName);
-          console.log(`DALL-E 이미지 생성 시작: ${recipeName}`);
+          // 레시피 정보가 있으면 더 구체적인 프롬프트 생성
+          const recipeInfo = this.getRecipeInfo(recipeName);
+          const prompt = this.openAIService.generateRecipeImagePrompt(
+            recipeName, 
+            recipeInfo?.description, 
+            recipeInfo?.ingredients
+          );
+          console.log(`DALL-E 이미지 생성 시작: ${recipeName}`, prompt);
           const dallEImageUrl = await this.openAIService.generateImage(prompt, '1024x1024');
           if (dallEImageUrl) {
             console.log(`DALL-E 이미지 생성 성공: ${recipeName} -> ${dallEImageUrl}`);

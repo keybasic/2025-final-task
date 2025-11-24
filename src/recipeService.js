@@ -143,11 +143,20 @@ class RecipeService {
         // 레시피 형식 변환 및 이미지 추가
         const formattedRecipes = await Promise.all(
           aiRecipes.map(async (recipe, index) => {
+            // 레시피 정보를 이미지 서비스에 저장 (더 정확한 이미지 생성용)
+            if (this.imageService) {
+              this.imageService.setRecipeInfo(recipe.name, {
+                description: recipe.description || '',
+                ingredients: recipe.ingredients || []
+              });
+            }
+            
             let imageUrl = null;
             
             // 이미지 서비스로 레시피 이미지 가져오기
             if (this.imageService) {
               try {
+                // 레시피 정보를 포함하여 이미지 생성
                 imageUrl = await this.imageService.getRecipeImage(recipe.name);
               } catch (error) {
                 console.warn(`레시피 이미지 가져오기 실패 (${recipe.name}):`, error);
