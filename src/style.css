@@ -280,6 +280,49 @@ body {
   color: var(--primary-color);
 }
 
+.recommendation-comment {
+  margin-bottom: 2rem;
+}
+
+.recommendation-comment-card {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-left: 4px solid var(--primary-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  box-shadow: var(--shadow);
+  margin-bottom: 1.5rem;
+}
+
+.recommendation-comment-card .comment-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.recommendation-comment-card .comment-text {
+  flex: 1;
+}
+
+.recommendation-comment-card .comment-text p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
 .recipe-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

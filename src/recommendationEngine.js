@@ -1,10 +1,11 @@
 // 레시피 추천 엔진
 class RecipeRecommendationEngine {
-  constructor(dataManager, weatherService, openAIService, imageService) {
+  constructor(dataManager, weatherService, openAIService, imageService, recipeService) {
     this.dataManager = dataManager;
     this.weatherService = weatherService;
     this.openAIService = openAIService;
     this.imageService = imageService;
+    this.recipeService = recipeService;
   }
 
   async getRecommendations(useAI = true) {
@@ -23,6 +24,53 @@ class RecipeRecommendationEngine {
 
     // 모든 레시피 가져오기
     let recipes = [...data.recipes];
+    
+    // API를 사용하여 재료 기반 레시피 검색
+    if (this.recipeService && ingredients.length > 0) {
+      try {
+        // 재료 이름을 영어로 변환하여 검색
+        const ingredientNames = ingredients.map(ing => 
+          this.recipeService.translateIngredientToEnglish(ing.name)
+        );
+        
+        console.log('API 레시피 검색 시작:', ingredientNames);
+        const apiRecipes = await this.recipeService.searchRecipesByIngredients(ingredientNames);
+        
+        if (apiRecipes && apiRecipes.length > 0) {
+          // 기본 레시피 이름 목록 생성 (중복 체크용)
+          const existingRecipeNames = new Set(
+            recipes.map(r => r.name.toLowerCase().trim())
+          );
+          
+          // 중복되지 않는 API 레시피만 추가
+          const uniqueApiRecipes = apiRecipes.filter(apiRecipe => {
+            const apiRecipeName = apiRecipe.name.toLowerCase().trim();
+            // 이름이 정확히 일치하거나 포함 관계가 있는 경우 제외
+            const isDuplicate = existingRecipeNames.has(apiRecipeName) ||
+              Array.from(existingRecipeNames).some(existingName => 
+                existingName.includes(apiRecipeName) || apiRecipeName.includes(existingName)
+              );
+            
+            if (isDuplicate) {
+              console.log(`중복 레시피 제외: ${apiRecipe.name} (기본 레시피와 중복)`);
+            }
+            
+            return !isDuplicate;
+          });
+          
+          // 중복되지 않는 API 레시피만 추가
+          if (uniqueApiRecipes.length > 0) {
+            recipes = [...recipes, ...uniqueApiRecipes];
+            console.log(`API에서 ${uniqueApiRecipes.length}개의 고유 레시피를 추가했습니다. (중복 ${apiRecipes.length - uniqueApiRecipes.length}개 제외)`);
+          } else {
+            console.log('모든 API 레시피가 기본 레시피와 중복되어 제외되었습니다.');
+          }
+        }
+      } catch (error) {
+        console.warn('API 레시피 검색 실패:', error);
+        // API 검색 실패 시 기본 레시피만 사용
+      }
+    }
     
     // 기본 레시피에 이미지가 없으면 이미지 서비스로 가져오기 (병렬 처리)
     // 필터링 전에 이미지를 먼저 가져와야 함
@@ -111,6 +159,17 @@ class RecipeRecommendationEngine {
       return !recipe.weather || recipe.weather.includes(weather.condition);
     });
 
+    // 한국인 선호 메뉴 목록
+    const koreanFavoriteRecipes = [
+      '김치찌개', '된장찌개', '순두부찌개', '부대찌개', '갈비탕', '설렁탕', '미역국', '콩나물국',
+      '비빔밥', '김치볶음밥', '볶음밥', '주먹밥',
+      '불고기', '삼겹살', '갈비', '제육볶음', '닭볶음탕',
+      '계란말이', '계란후라이', '계란찜', '두부조림', '나물', '시금치나물',
+      '라면', '짜장면', '비빔국수', '물냉면',
+      '떡볶이', '순대', '어묵', '호떡',
+      '된장찌개', '김치', '된장', '고추장', '찌개', '국', '탕'
+    ];
+
     // 3. 사용자 선호도 기반 점수 계산
     recipes = recipes.map(recipe => {
       let score = 0;
@@ -120,6 +179,21 @@ class RecipeRecommendationEngine {
       if (recipeRatings.length > 0) {
         const avgRating = recipeRatings.reduce((sum, r) => sum + r.rating, 0) / recipeRatings.length;
         score += avgRating * 10;
+      }
+
+      // 한국인 선호 메뉴 가중치 추가
+      const recipeName = recipe.name || '';
+      const isKoreanFavorite = koreanFavoriteRecipes.some(favorite => 
+        recipeName.includes(favorite) || favorite.includes(recipeName)
+      );
+      if (isKoreanFavorite) {
+        score += 15; // 한국인 선호 메뉴에 가중치 추가
+        console.log(`한국인 선호 메뉴 가중치 추가: ${recipeName}`);
+      }
+
+      // 한국 요리 태그 확인
+      if (recipe.tags?.includes('한식') || recipe.category === '한식') {
+        score += 10;
       }
 
       // 선호 맛 매칭
@@ -157,8 +231,28 @@ class RecipeRecommendationEngine {
     // 점수 순으로 정렬
     recipes.sort((a, b) => b.score - a.score);
 
+    // 중복 제거 (이름 기준)
+    const seenNames = new Set();
+    const uniqueRecipes = [];
+    
+    for (const recipe of recipes) {
+      const recipeName = recipe.name.toLowerCase().trim();
+      // 정확히 일치하는 이름이 없고, 포함 관계도 없는 경우만 추가
+      const isDuplicate = seenNames.has(recipeName) ||
+        Array.from(seenNames).some(seenName => 
+          seenName.includes(recipeName) || recipeName.includes(seenName)
+        );
+      
+      if (!isDuplicate) {
+        seenNames.add(recipeName);
+        uniqueRecipes.push(recipe);
+      } else {
+        console.log(`최종 추천에서 중복 제외: ${recipe.name}`);
+      }
+    }
+
     // 기본 레시피 먼저 반환 (로딩 속도 개선)
-    const topRecipes = recipes.slice(0, 3);
+    const topRecipes = uniqueRecipes.slice(0, 3);
     
     // 이미지가 없는 레시피에 대해 즉시 사용 가능한 이미지 설정
     topRecipes.forEach(recipe => {

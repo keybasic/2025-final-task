@@ -50,7 +50,7 @@ class AppUI {
         <img src="${aiImageUrl}" 
              alt="${recipe.name}" 
              style="cursor: pointer;"
-             onclick="app.showRecipeDetail(${recipe.id})"
+             onclick="app.showRecipeDetail('${recipe.id}')"
              onerror="this.onerror=null; this.src='https://dummyimage.com/400x300/4CAF50/ffffff&text=${encodeURIComponent(recipe.name)}';">
         <div class="recipe-info">
           <h3>${recipe.name}</h3>
@@ -58,7 +58,7 @@ class AppUI {
             <span>⏱️ ${recipe.cookingTime}분</span>
             <span>📊 ${recipe.difficulty}</span>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="app.showRecipeDetail(${recipe.id})">레시피 보기</button>
+          <button class="btn btn-primary btn-sm" onclick="app.showRecipeDetail('${recipe.id}')">레시피 보기</button>
         </div>
       `;
       
@@ -255,7 +255,7 @@ class AppUI {
     // 병렬로 날씨와 레시피 추천 가져오기 (로딩 속도 개선)
     const [weather, recommendations] = await Promise.all([
       this.weatherService.getWeather(user.city),
-      this.recommendationEngine.getRecommendations(true) // AI 추천 활성화
+      this.recommendationEngine.getRecommendations(false) // AI 추천 비활성화 (로딩 속도 개선)
     ]);
     
     // AI 레시피를 추적하기 위해 저장
@@ -277,6 +277,9 @@ class AppUI {
       `;
     }
 
+    // 추천 의견 생성
+    const recommendationComment = this.generateRecommendationComment(user, data.ingredients, weather, recommendations);
+    
     // 레시피 추천 업데이트
     const recommendationsSection = main.querySelector('.recommendations-section');
     if (recommendationsSection) {
@@ -293,6 +296,9 @@ class AppUI {
       } else {
         recommendationsSection.innerHTML = `
           <h2>오늘의 요리 추천 🍳</h2>
+          <div class="recommendation-comment">
+            ${recommendationComment}
+          </div>
           <div class="recipe-grid">
             ${recommendations.map(recipe => {
               // 이미지 URL이 유효한지 확인
@@ -318,13 +324,16 @@ class AppUI {
                 finalImageUrl = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
               }
               
+              // 레시피 ID를 문자열로 변환하여 안전하게 처리
+              const recipeIdStr = typeof recipe.id === 'string' ? `'${recipe.id}'` : recipe.id;
+              
               return `
               <div class="recipe-card" data-recipe-id="${recipe.id}" data-is-ai="${recipe.isAI || false}">
                 <img src="${finalImageUrl}" 
                      alt="${recipe.name}" 
                      loading="lazy" 
                      style="cursor: pointer;"
-                     onclick="app.showRecipeDetail(${recipe.id})"
+                     onclick="app.showRecipeDetail('${recipe.id}')"
                      onerror="this.onerror=null; this.src='https://dummyimage.com/400x300/4CAF50/ffffff&text=${encodeURIComponent(recipe.name)}';">
                 <div class="recipe-info">
                   <h3>${recipe.name}</h3>
@@ -332,7 +341,7 @@ class AppUI {
                     <span>⏱️ ${recipe.cookingTime}분</span>
                     <span>📊 ${recipe.difficulty}</span>
                   </div>
-                  <button class="btn btn-primary btn-sm" onclick="app.showRecipeDetail(${recipe.id})">레시피 보기</button>
+                  <button class="btn btn-primary btn-sm" onclick="app.showRecipeDetail('${recipe.id}')">레시피 보기</button>
                 </div>
               </div>
             `;
@@ -341,6 +350,89 @@ class AppUI {
         `;
       }
     }
+  }
+
+  // 추천 의견 생성 함수
+  generateRecommendationComment(user, ingredients, weather, recommendations) {
+    // recommendations가 에러이거나 배열이 아닌 경우 처리
+    if (!recommendations || (typeof recommendations === 'object' && recommendations.error)) {
+      return '';
+    }
+    
+    if (!Array.isArray(recommendations) || recommendations.length === 0) {
+      return '';
+    }
+    
+    const commentParts = [];
+    
+    // 1. 날씨 기반 의견
+    if (weather && weather.condition) {
+      const weatherEmoji = weather.condition === '맑음' ? '☀️' : 
+                          weather.condition === '비' ? '🌧️' : 
+                          weather.condition === '흐림' ? '☁️' : '🌤️';
+      
+      if (weather.condition === '맑음') {
+        commentParts.push(`${weatherEmoji} 오늘은 맑은 날씨네요! 시원한 국물 요리나 샐러드가 좋을 것 같아요.`);
+      } else if (weather.condition === '비' || weather.condition === '흐림') {
+        commentParts.push(`${weatherEmoji} 오늘은 ${weather.condition} 날씨입니다. 따뜻한 국물 요리나 찜 요리를 추천드려요!`);
+      } else {
+        commentParts.push(`${weatherEmoji} 오늘 날씨는 ${weather.condition}입니다.`);
+      }
+    }
+    
+    // 2. 재료 기반 의견
+    if (ingredients && ingredients.length > 0) {
+      const ingredientNames = ingredients.map(ing => ing.name).slice(0, 5).join(', ');
+      if (ingredients.length <= 5) {
+        commentParts.push(`현재 냉장고에 ${ingredientNames}${ingredients.length > 1 ? '이(가)' : '가'} 있으시네요.`);
+      } else {
+        commentParts.push(`현재 냉장고에 ${ingredientNames} 외 ${ingredients.length - 5}개의 재료가 있으시네요.`);
+      }
+    } else {
+      commentParts.push(`현재 냉장고가 비어있네요. 재료를 추가해주시면 더 다양한 요리를 추천해드릴 수 있어요!`);
+    }
+    
+    // 3. 선호 맛 기반 의견
+    if (user && user.preferences && user.preferences.length > 0) {
+      const preferenceText = user.preferences.join(', ');
+      commentParts.push(`선호하시는 맛은 ${preferenceText}이(가) 맞으시죠?`);
+    }
+    
+    // 4. 알레르기 기반 의견
+    if (user && user.allergies && user.allergies.length > 0) {
+      const allergyText = user.allergies.join(', ');
+      commentParts.push(`알레르기 정보(${allergyText})를 고려하여 추천해드렸어요.`);
+    }
+    
+    // 5. 추천 레시피 개수 기반 의견
+    if (recommendations && recommendations.length > 0) {
+      const recipeNames = recommendations.slice(0, 3).map(r => r.name).join(', ');
+      const recipeCount = recommendations.length;
+      if (recipeCount === 1) {
+        commentParts.push(`오늘은 ${recipeNames}을(를) 추천드려요!`);
+      } else if (recipeCount <= 3) {
+        commentParts.push(`오늘은 ${recipeNames}을(를) 추천드려요!`);
+      } else {
+        commentParts.push(`오늘은 ${recipeNames} 외 ${recipeCount - 3}개의 요리를 추천드려요!`);
+      }
+    }
+    
+    // 의견 조합
+    let comment = commentParts.join(' ');
+    
+    // 의견이 너무 길면 줄이기
+    if (comment.length > 250) {
+      comment = commentParts.slice(0, 3).join(' ') + '...';
+    }
+    
+    return `
+      <div class="recommendation-comment-card">
+        <div class="comment-icon">💡</div>
+        <div class="comment-text">
+          <p>${comment}</p>
+        </div>
+      </div>
+    `;
   }
 
   showFridge() {
@@ -561,7 +653,14 @@ class AppUI {
     const data = this.dataManager.getData();
     data.ingredients = data.ingredients.filter(ing => ing.id !== id);
     this.dataManager.updateData('ingredients', data.ingredients);
-    this.renderFridge();
+    
+    // 현재 뷰에 따라 업데이트
+    if (this.currentView === 'fridge') {
+      this.renderFridge();
+    } else if (this.currentView === 'home') {
+      // 홈 화면이면 추천 레시피 다시 로드
+      this.renderHome();
+    }
   }
 
   showShopping() {
@@ -666,10 +765,14 @@ class AppUI {
       data.ingredients.push(newIngredient);
       this.dataManager.updateData('ingredients', data.ingredients);
       
+      // 현재 뷰에 따라 업데이트
       if (this.currentView === 'shopping') {
         this.renderShopping();
       } else if (this.currentView === 'fridge') {
         this.renderFridge();
+      } else if (this.currentView === 'home') {
+        // 홈 화면이면 추천 레시피 다시 로드
+        this.renderHome();
       }
     }
   }
@@ -887,21 +990,42 @@ class AppUI {
   }
 
   showRecipeDetail(recipeId) {
+    console.log('레시피 상세 페이지 열기:', recipeId);
+    
+    // recipeId를 숫자나 문자열로 변환
+    let searchId = recipeId;
+    if (typeof recipeId === 'string' && !isNaN(recipeId)) {
+      searchId = parseInt(recipeId);
+    }
+    
     // AI 생성 레시피는 메모리에만 존재하므로 별도 처리
     // recommendationEngine에서 최근 추천된 레시피를 저장해두어야 함
     const data = this.dataManager.getData();
-    let recipe = data.recipes.find(r => r.id === recipeId);
+    let recipe = data.recipes.find(r => {
+      // ID 비교 (숫자와 문자열 모두 처리)
+      const rId = typeof r.id === 'string' && !isNaN(r.id) ? parseInt(r.id) : r.id;
+      const sId = typeof searchId === 'string' && !isNaN(searchId) ? parseInt(searchId) : searchId;
+      return rId === sId || r.id === searchId || r.id === recipeId;
+    });
     
     // AI 레시피는 메모리에만 있을 수 있으므로, 임시 저장소에서 찾기
     if (!recipe && this.lastRecommendations) {
-      recipe = this.lastRecommendations.find(r => r.id === recipeId);
+      recipe = this.lastRecommendations.find(r => {
+        const rId = typeof r.id === 'string' && !isNaN(r.id) ? parseInt(r.id) : r.id;
+        const sId = typeof searchId === 'string' && !isNaN(searchId) ? parseInt(searchId) : searchId;
+        return rId === sId || r.id === searchId || r.id === recipeId;
+      });
     }
     
     if (!recipe) {
+      console.error('레시피를 찾을 수 없습니다. ID:', recipeId, '검색 ID:', searchId);
+      console.log('사용 가능한 레시피 ID:', data.recipes.map(r => r.id));
+      console.log('최근 추천 레시피 ID:', this.lastRecommendations?.map(r => r.id));
       alert('레시피를 찾을 수 없습니다.');
       return;
     }
 
+    console.log('레시피 찾음:', recipe.name, recipe.id);
     this.currentRecipe = recipe;
     this.renderRecipeDetail();
   }
